@@ -28,30 +28,49 @@ class MyWindow(QMainWindow, form_class):
         super().__init__()
         self.setupUi(self)
 
+        # 전일 주요 지수 정보 확인
+        daw_predayinfo = self.get_predayinfo('DJI')     # 다우지수 전일 정보 확인
+        nasdaq_predayinfo = self.get_predayinfo('IXIC') # 나스닥지수 전일 정보 확인
+        us500_predayinfo = self.get_predayinfo('US500') # S&P500지수
+        kospi_predayinfo = self.get_predayinfo('KS11')  # KOSPI지수
+        kosdaq_predayinfo = self.get_predayinfo('KQ11') # KOSDAQ지수
+
         # 키움 로그인 진행
         self.kiwoom = Kiwoom()
-        # self.kiwoom.comm_connect()
+        self.kiwoom.comm_connect()
 
-        # 전일 정보 확인
-        self.get_info()
+        def get_openprice(self, code):
+            self.kiwoom.set_input_value("종목코드", code)
+            self.kiwoom.comm_rq_data("opt10001_req", "opt10001", 0, "1001")
+            return
 
-        # 다우지수 전일 정보 확인
-        DJI_predayinfo = self.get_predayinfo('DJI')
-        print(DJI_predayinfo)
+        self.S1_233740_buy = 0          # 매수대상인지 확인용 변수
+        self.S1_233740_amount = 1       # 매수수량
+        self.S1_233740_openprice = 0    # 시작가
+        self.S1_233740_down = 0         # 하락기록 누적 횟수
+        self.S1_233740_sell1 = 0        # 매도 체크1
+        self.S1_233740_sell2 = 0        # 매도 체크2
+        self.S1_233740_sell3 = 0        # 매도 체크3
+        self.S1_233740_pre_5hap = 0     # 이전 5호가합 저장용
 
-        # 나스닥지수 전일 정보 확인
-        IXIC_predayinfo = self.get_predayinfo('IXIC')
-        print(IXIC_predayinfo)
+        self.S1_251340_buy = 0          # 매수대상인지 확인용 변수
+        self.S1_251340_amount = 1       # 매수수량
+        self.S1_251340_openprice = 0    # 시작가
+        self.S1_251340_down = 0         # 하락기록 누적 횟수
+        self.S1_251340_sell1 = 0        # 매도 체크1
+        self.S1_251340_sell2 = 0        # 매도 체크2
+        self.S1_251340_sell3 = 0        # 매도 체크3
+        self.S1_251340_pre_5hap = 0     # 이전 5호가합 저장용
 
-        # S&P500지수
-        US500_predayinfo = self.get_predayinfo('US500')
-        print(US500_predayinfo)
+        # S1-장시작 전 호가잔량을 보고 매수, 3연속 잔량 하락시 반매도, 3,5,총합이 음수면 반매도
+        # 10초 단위 판단 : 9시 이후, 3,5,총이 모두 음수 기록시 절반 매도
+        # 매수 이후부터 3연속 5차이가 하락하면 절반 매도
 
         # 1초마다 반복하는 이벤트 발생
         self.timer = QTimer(self)
         self.timer.start(1000)
         self.timer.timeout.connect(self.timeout)
-        '''
+
         # 10초마다 반복하는 이벤트 발생
         self.timer2 = QTimer(self)
         self.timer2.start(1000*10)
@@ -60,17 +79,17 @@ class MyWindow(QMainWindow, form_class):
         # 종목이름 입력 시 번호 전환 표기
         self.ui_stockcode_LE.textChanged.connect(self.code_changed)
 
-        # 사용자 정보 획득
-        # id = self.kiwoom.dynamicCall('GetLoginInfo("USER_ID")')
-        # name = self.kiwoom.dynamicCall('GetLoginInfo("USER_NAME")')
+        # 사용자 정보 획득 - 언제 필요한 정보인지 검토 필요
+        id = self.kiwoom.dynamicCall('GetLoginInfo("USER_ID")')
+        name = self.kiwoom.dynamicCall('GetLoginInfo("USER_NAME")')
         accounts_num = int(self.kiwoom.get_login_info("ACCOUNT_CNT"))
         accounts = self.kiwoom.get_login_info("ACCNO")
         accounts_list = accounts.split(';')[0:accounts_num]
         self.ui_accountlist_CB.addItems(accounts_list)
         self.ui_sendorder_PB.clicked.connect(self.send_order)
         self.ui_check_PB.clicked.connect(self.check_balance)
-        # self.account1 = accounts_list[0]
-        '''
+        self.account1 = accounts_list[0]
+
     # 미국, 한국 증시 전일정보 확인
     def get_predayinfo(self, CODE):
         day = datetime.today() - timedelta(10)
@@ -80,176 +99,58 @@ class MyWindow(QMainWindow, form_class):
         today_open = df.iloc[rows -1]['Open']       # 직전 시가
         yesterday = df.iloc[rows -2]['Close']       # 전일 종가
         lastday = df.index[rows - 1]                # 최종거래일
+
         # 판단 참고 지표
         diff = today_close - yesterday              # 전일 대비 증감
         rate = (diff / yesterday) * 100             # 증감비율
         bong = today_close - today_open             # 당일 봉차트
 
         # 출력할 결과값 정리 (종가, 전일대비증감값, 전일대비증감비, 당일 변경 봉값)
-        result = [today_close, diff, rate, bong]
+        result = [round(today_close, 2), round(diff, 2), round(rate, 2), round(bong, 2)]
+
+        # 전일 대비 종가를 화살표로 표기
+        if diff > 0:    diff_graph = '▲'
+        elif diff < 0:  diff_graph = '▼'
+        else:           diff_graph = '-'
+
+        # 당일 종가를 화살표로 표기
+        if bong >= 0:   bong_graph = '↗'
+        else:           bong_graph = '↘'
+
+        # 각 코드 별 UI 반영
+        if CODE == 'DJI':
+            ui_result = str(result[0]) + bong_graph + '(' + str(result[2]) + '/' + str(result[3]) + '%' + diff_graph + ')'
+            if diff_graph == '▼':    self.ui_daw30_LE.setStyleSheet("color : blue;""background-color : rgb(240, 240, 240);")
+            else:                   self.ui_daw30_LE.setStyleSheet("color : red;""background-color : rgb(240, 240, 240);")
+            self.ui_daw30_LE.setText(ui_result)
+            self.ui_uslastday_LE.setText(str(lastday)[:10])
+            print(CODE, result)
+        elif CODE == 'IXIC':
+            ui_result = str(result[0]) + bong_graph + '(' + str(result[2]) + '/' + str(result[3]) + '%' + diff_graph + ')'
+            if diff_graph == '▼':    self.ui_nasdaq_LE.setStyleSheet("color : blue;""background-color : rgb(240, 240, 240);")
+            else:                   self.ui_nasdaq_LE.setStyleSheet("color : red;""background-color : rgb(240, 240, 240);")
+            self.ui_nasdaq_LE.setText(ui_result)
+            print(CODE, result)
+        elif CODE == 'US500':
+            ui_result = str(result[0]) + bong_graph + '(' + str(result[2]) + '/' + str(result[3]) + '%' + diff_graph + ')'
+            if diff_graph == '▼':    self.ui_us500_LE.setStyleSheet("color : blue;""background-color : rgb(240, 240, 240);")
+            else:                   self.ui_us500_LE.setStyleSheet("color : red;""background-color : rgb(240, 240, 240);")
+            self.ui_us500_LE.setText(ui_result)
+            print(CODE, result)
+        elif CODE == 'KS11':
+            ui_result = str(result[0]) + bong_graph + '(' + str(result[2]) + '/' + str(result[3]) + '%' + diff_graph + ')'
+            if diff_graph == '▼':    self.ui_kospi_LE.setStyleSheet("color : blue;""background-color : rgb(240, 240, 240);")
+            else:                   self.ui_kospi_LE.setStyleSheet("color : red;""background-color : rgb(240, 240, 240);")
+            self.ui_kospi_LE.setText(ui_result)
+            self.ui_kolastday_LE.setText(str(lastday)[:10])
+            print(CODE, result)
+        elif CODE == 'KQ11':
+            ui_result = str(result[0]) + bong_graph + '(' + str(result[2]) + '/' + str(result[3]) + '%' + diff_graph + ')'
+            if diff_graph == '▼':    self.ui_kosdaq_LE.setStyleSheet("color : blue;""background-color : rgb(240, 240, 240);")
+            else:                   self.ui_kosdaq_LE.setStyleSheet("color : red;""background-color : rgb(240, 240, 240);")
+            self.ui_kosdaq_LE.setText(ui_result)
+            print(CODE, result)
         return result
-
-    def get_info(self):
-        day = datetime.today() - timedelta(10)
-
-        df_kospi = fdr.DataReader('KS11', day)
-        df_kosdaq = fdr.DataReader('KQ11', day)
-        # df_china = fdr.DataReader('CSI300', day)
-
-        ### 다우지수
-        df_DJI = fdr.DataReader('DJI', day)
-        rows = len(df_DJI)
-        today_close = df_DJI.iloc[rows - 1]['Close']    # 직전 종가
-        today_open = df_DJI.iloc[rows - 1]['Open']      # 직전 시가
-        yesterday = df_DJI.iloc[rows - 2]['Close']      # 전일 종가
-        lastday = df_DJI.index[rows - 1]
-        # 판단 참고 지표
-        daw_diff = today_close - yesterday                  # 전일 대비 증감
-        daw_rate = ((today_close - yesterday) / yesterday) * 100    # 증감비율
-        daw_bong = today_close - today_open                 # 당일 봉차트
-        # 전일 대비 종가를 화살표로 표기
-        if daw_diff > 0:
-            diff_graph = '%▲'
-            self.ui_daw30_LE.setStyleSheet("color : red;""background-color : rgb(240, 240, 240);")
-        elif daw_diff < 0:
-            diff_graph = '%▼'
-            self.ui_daw30_LE.setStyleSheet("color : blue;""background-color : rgb(240, 240, 240);")
-        else:
-            diff_graph = '-'
-        # 당일 종가를 화살표로 표기
-        if daw_bong >= 0:
-            bong_graph = '↗'
-        else:
-            bong_graph = '↘'
-        # 출력할 결과값 정리
-        daw30_result = str(round(today_close, 2)) + bong_graph + '(' + str(round(daw_diff, 2)) + '/' + str(round(daw_rate, 2)) + diff_graph + ')'
-        # UI에 표기
-        self.ui_daw30_LE.setText(daw30_result)
-
-        self.ui_uslastday_LE.setText(str(lastday)[:10])
-
-        ### 나스닥지수
-        df_IXIC = fdr.DataReader('IXIC', day)
-        rows = len(df_IXIC)
-        today_close = df_IXIC.iloc[rows - 1]['Close']  # 직전 종가
-        today_open = df_IXIC.iloc[rows - 1]['Open']  # 직전 시가
-        yesterday = df_IXIC.iloc[rows - 2]['Close']  # 전일 종가
-        # 판단 참고 지표
-        ixic_diff = today_close - yesterday  # 전일 대비 증감
-        ixic_rate = ((today_close - yesterday) / yesterday) * 100  # 증감비율
-        ixic_bong = today_close - today_open  # 당일 봉차트
-        # 전일 대비 종가를 화살표로 표기
-        if ixic_diff > 0:
-            diff_graph = '%▲'
-            self.ui_nasdaq_LE.setStyleSheet("color : red;""background-color : rgb(240, 240, 240);")
-        elif ixic_diff < 0:
-            diff_graph = '%▼'
-            self.ui_nasdaq_LE.setStyleSheet("color : blue;""background-color : rgb(240, 240, 240);")
-        else:
-            diff_graph = '-'
-        # 당일 종가를 화살표로 표기
-        if ixic_bong >= 0:
-            bong_graph = '↗'
-        else:
-            bong_graph = '↘'
-        # 출력할 결과값 정리
-        ixic_result = str(round(today_close, 2)) + bong_graph + '(' + str(round(ixic_diff, 2)) + '/' + str(
-            round(ixic_rate, 2)) + diff_graph + ')'
-        # UI에 표기
-        self.ui_nasdaq_LE.setText(ixic_result)
-
-        ### S&P500지수
-        df_US500 = fdr.DataReader('US500', day)
-        rows = len(df_US500)
-        today_close = df_US500.iloc[rows - 1]['Close']  # 직전 종가
-        today_open = df_US500.iloc[rows - 1]['Open']  # 직전 시가
-        yesterday = df_US500.iloc[rows - 2]['Close']  # 전일 종가
-        # 판단 참고 지표
-        us500_diff = today_close - yesterday  # 전일 대비 증감
-        us500_rate = ((today_close - yesterday) / yesterday) * 100  # 증감비율
-        us500_bong = today_close - today_open  # 당일 봉차트
-        # 전일 대비 종가를 화살표로 표기
-        if us500_diff > 0:
-            diff_graph = '%▲'
-            self.ui_us500_LE.setStyleSheet("color : red;""background-color : rgb(240, 240, 240);")
-        elif us500_diff < 0:
-            diff_graph = '%▼'
-            self.ui_us500_LE.setStyleSheet("color : blue;""background-color : rgb(240, 240, 240);")
-        else:
-            diff_graph = '-'
-        # 당일 종가를 화살표로 표기
-        if us500_bong >= 0:
-            bong_graph = '↗'
-        else:
-            bong_graph = '↘'
-        # 출력할 결과값 정리
-        us500_result = str(round(today_close, 2)) + bong_graph + '(' + str(round(us500_diff, 2)) + '/' + str(
-            round(us500_rate, 2)) + diff_graph + ')'
-        # UI에 표기
-        self.ui_us500_LE.setText(us500_result)
-
-        ### 코스피
-        df_kospi = fdr.DataReader('KS11', day)
-        rows = len(df_kospi)
-        today_close = df_kospi.iloc[rows - 1]['Close']  # 직전 종가
-        today_open = df_kospi.iloc[rows - 1]['Open']  # 직전 시가
-        yesterday = df_kospi.iloc[rows - 2]['Close']  # 전일 종가
-        lastday = df_kospi.index[rows - 1]
-        # 판단 참고 지표
-        kospi_diff = today_close - yesterday  # 전일 대비 증감
-        kospi_rate = ((today_close - yesterday) / yesterday) * 100  # 증감비율
-        kospi_bong = today_close - today_open  # 당일 봉차트
-        # 전일 대비 종가를 화살표로 표기
-        if kospi_diff > 0:
-            diff_graph = '%▲'
-            self.ui_kospi_LE.setStyleSheet("color : red;""background-color : rgb(240, 240, 240);")
-        elif kospi_diff < 0:
-            diff_graph = '%▼'
-            self.ui_kospi_LE.setStyleSheet("color : blue;""background-color : rgb(240, 240, 240);")
-        else:
-            diff_graph = '-'
-        # 당일 종가를 화살표로 표기
-        if kospi_bong >= 0:
-            bong_graph = '↗'
-        else:
-            bong_graph = '↘'
-        # 출력할 결과값 정리
-        kospi_result = str(round(today_close, 2)) + bong_graph + '(' + str(round(kospi_diff, 2)) + '/' + str(
-            round(kospi_rate, 2)) + diff_graph + ')'
-        # UI에 표기
-        self.ui_kospi_LE.setText(kospi_result)
-
-        self.ui_kolastday_LE.setText(str(lastday)[:10])
-
-        ### 코스닥
-        df_kosdaq = fdr.DataReader('KQ11', day)
-        rows = len(df_kosdaq)
-        today_close = df_kosdaq.iloc[rows - 1]['Close']  # 직전 종가
-        today_open = df_kosdaq.iloc[rows - 1]['Open']  # 직전 시가
-        yesterday = df_kosdaq.iloc[rows - 2]['Close']  # 전일 종가
-        # 판단 참고 지표
-        kosdaq_diff = today_close - yesterday  # 전일 대비 증감
-        kosdaq_rate = ((today_close - yesterday) / yesterday) * 100  # 증감비율
-        kosdaq_bong = today_close - today_open  # 당일 봉차트
-        # 전일 대비 종가를 화살표로 표기
-        if kosdaq_diff > 0:
-            diff_graph = '%▲'
-            self.ui_kosdaq_LE.setStyleSheet("color : red;""background-color : rgb(240, 240, 240);")
-        elif kosdaq_diff < 0:
-            diff_graph = '%▼'
-            self.ui_kosdaq_LE.setStyleSheet("color : blue;""background-color : rgb(240, 240, 240);")
-        else:
-            diff_graph = '-'
-        # 당일 종가를 화살표로 표기
-        if kosdaq_bong >= 0:
-            bong_graph = '↗'
-        else:
-            bong_graph = '↘'
-        # 출력할 결과값 정리
-        kosdaq_result = str(round(today_close, 2)) + bong_graph + '(' + str(round(kosdaq_diff, 2)) + '/' + str(
-            round(kosdaq_rate, 2)) + diff_graph + ')'
-        # UI에 표기
-        self.ui_kosdaq_LE.setText(kosdaq_result)
 
     ### 종목 정의
     stocks_code = []        # 종목별 코드
@@ -269,16 +170,6 @@ class MyWindow(QMainWindow, form_class):
     for stock in (stocks_name):
         print(stock)
 
-    print(stocks_name)
-    print(type(stocks_name))
-    # 1. 전일가 확인
-
-    # 2. 시작가 확인
-    # 3. 1초마다 현재가 확인 (최고가, 최저가 갱신)
-    # +예상가 확인
-    # +예상가 도달여부 확인
-
-
     # 1초마다 반복하는 이벤트
     def timeout(self):
         current_time = QTime.currentTime()
@@ -295,8 +186,114 @@ class MyWindow(QMainWindow, form_class):
 
     # 10초마다 반복하는 이벤트
     def timeout2(self):
+        current_time = QTime.currentTime()
+
         if self.ui_realtime_CB.isChecked():
             self.check_balance()
+
+        if current_time > QTime(8, 57, 0) and current_time < QTime(15, 31, 0):
+            # 기본정보조회
+            self.kiwoom.reset_opt10004_output()
+            self.kiwoom.set_input_value("종목코드", '233740')
+            self.kiwoom.comm_rq_data("opt10004_req", "opt10004", 0, "0101")
+
+            imsi = self.kiwoom.opt10004_output['multi'][0]
+            data_233740 = [self.text_time, imsi[0], imsi[1], imsi[2], imsi[3], imsi[4], imsi[5], imsi[6], imsi[7], imsi[8],
+                           imsi[9], imsi[10], imsi[11], imsi[12], imsi[13]]
+            print(data_233740)
+
+            f = open('newfile_233740.txt', 'a')
+            f.write(str(data_233740))
+            f.write("\n")
+            f.close()
+
+            # 기본정보조회
+            self.kiwoom.reset_opt10004_output()
+            self.kiwoom.set_input_value("종목코드", '251340')
+            self.kiwoom.comm_rq_data("opt10004_req", "opt10004", 0, "0101")
+
+            imsi = self.kiwoom.opt10004_output['multi'][0]
+            data_251340 = [self.text_time, imsi[0], imsi[1], imsi[2], imsi[3], imsi[4], imsi[5], imsi[6], imsi[7], imsi[8],
+                           imsi[9], imsi[10], imsi[11], imsi[12], imsi[13]]
+            print(data_251340)
+
+            f = open('newfile_251340.txt', 'a')
+            f.write(str(data_251340))
+            f.write("\n")
+            f.close()
+
+        # 장 전 매수여부 판단용
+        if current_time >= QTime(8, 59, 50) and current_time < QTime(9, 0, 0):
+            # 직전 3합차, 5합차이 둘다 양수면 매수 중 하나라도 마이너스면 매수 대상에서 제외
+            if data_233740[12] > 0 and data_233740[13] > 0:
+                self.S1_233740_buy = 1
+                print('레버리지 매수')
+                self.ui_history_TE.append(self.text_time + " 233740 매수 : " + str(data_233740[2]))
+
+                lRet = self.kiwoom.send_order("send_order_req", "0101", self.account1, 1, 233740, (self.S1_233740_amount), 0, "03", "")
+                if lRet == 0:
+                    print("주문성공")
+                else:
+                    print("주문실패")
+
+            if data_251340[12] > 0 or data_251340[13] > 0:
+                self.S1_251340_buy = 1
+                print('인버스 매수')
+
+                lRet = self.kiwoom.send_order("send_order_req", "0101", self.account1, 1, 251340, (self.S1_251340_amount), 0, "03", "")
+                if lRet == 0:
+                    print("주문성공")
+                else:
+                    print("주문실패")
+
+        # 매도 시점 판단용
+        if current_time > QTime(9, 0, 0):
+
+            # 레버리지
+            if self.S1_233740_buy == 1:
+                # 5합이 연속 하락인 지 계산
+                if data_233740[12] < self.S1_233740_pre_5hap:
+                    self.S1_233740_down = self.S1_233740_down + 1
+                else:
+                    self.S1_233740_down = 0
+                
+                # 조건 3: 5차가 3번연속 줄어들고, 5,3차가 모두 -찍을때 매도
+                if self.S1_233740_down == 3 and data_233740[12] < 0 and data_233740[13] and self.S1_233740_sell3 == 0:
+                    self.S1_233740_sell3 = 1
+                    print('레버리지 매도 - 호가5호합이 3연속 줄어들고, 5,3차가 마이너스')
+                    self.ui_history_TE.append(self.text_time + " 233740 매도3 : " + str(data_233740[1]))
+
+                    lRet = self.kiwoom.send_order("send_order_req", "0101", self.account1, 2, 233740, self.S1_233740_amount, 0, "03", "")
+                    if lRet == 0:
+                        print("주문성공")
+                    else:
+                        print("주문실패")
+
+            self.S1_233740_pre_5hap = data_233740[12]
+
+            # Inverse
+            # 매수가 유효한가?
+            if self.S1_251340_buy == 1:
+                # 5합이 연속 하락인 지 계산
+                if data_251340[12] < self.S1_251340_pre_5hap:
+                    self.S1_251340_down = self.S1_251340_down + 1
+                else:
+                    self.S1_251340_down = 0
+
+                # 조건 3: 5차가 3번연속 줄어들고, 5,3차가 모두 -찍을때 매도 2
+                if self.S1_251340_down == 3 and data_251340[12] < 0 and data_251340[13] and self.S1_251340_sell3 == 0:
+                    self.S1_251340_sell3 = 1
+                    print('Inverse 매도 - 호가5호합이 3연속 줄어들고, 5,3차가 마이너스')
+                    self.ui_history_TE.append(self.text_time + " 251340 매도3 : " + str(data_251340[1]))
+
+                    lRet = self.kiwoom.send_order("send_order_req", "0101", self.account1, 2, 251340, self.S1_251340_amount, 0, "03", "")
+                    if lRet == 0:
+                        print("주문성공")
+                    else:
+                        print("주문실패")
+
+            self.S1_251340_pre_5hap = data_251340[12]
+
 
     # 코드를 받아서 종목명으로 출력
     def code_changed(self):
@@ -330,6 +327,15 @@ class MyWindow(QMainWindow, form_class):
             else:
                 self.ui_history_TE.append(self.text_time + " 주문이 전송 실패 하였습니다")
                 self.ui_history_TE.append(self.text_time + ' ' + code+'/'+str(num)+'/'+str(price)+'/'+order_type+'/'+hoga)
+
+    # 매수 주문 (자동)
+    def send_order2(self, rqname, screen_no, order_type_lookup, code, num, price, hoga, order_no):
+        lRet = self.kiwoom.send_order("send_order_req", "0101", self.account1, 1, code, num, price, "03", "")
+        if lRet == 0:
+            print("주문성공")
+        else:
+            print("주문실패")
+        return lRet
 
     # 계좌 잔고 정보
     def check_balance(self):
@@ -375,151 +381,6 @@ class MyWindow(QMainWindow, form_class):
 
         self.ui_stockstatus_TW.resizeRowsToContents()
 
-'''
-        if self.starttrading == True:
-
-            
-
-            # 장전매수주문
-            if self.cur_time >= QTime(8, 58, 0) and self.position != 'holding' and self.sb_buy == False:
-                self.sb_buy = True
-                print(self.text_time, '장전매수주문', self.prebuyhoga, self.sb_num)
-                self.ui_sb.append('장전매수주문')
-                if self.ui_sb_realtrade.isChecked() == True:
-                    self.send_order("send_order_rq", "0101", self.account1, 1, str(self.code), self.sb_num, 0, "03", "")
-
-                # print(self.text_time, "장전매수여부확인", self.prebuyhoga)
-                # if self.prebuyhoga >= self.preprice * 0.97:
-                    # self.sb_num = int((self.deposit * 0.8)/self.prebuyhoga)
-
-            # 시작가 받아오기
-            if self.cur_time >= QTime(9, 0, 0) and self.openprice == 0 and self.login == True:
-                self.get_openprice(str(self.code))
-
-            # 잔고 남았을때 시가매매 손절 조건
-            if self.sb_num > 0:
-                # 9시 5분까지 잔량확인 후 손절체크 on
-                if self.cur_time >= QTime(9, 5, 0) and self.sb_check05 == 0:
-                    self.sb_check05 = 1
-                    self.sb_sell = True # 손절 on
-                    print("5분 현재가", self.realclose)
-                    self.ui_sb.append(self.text_time + ', 5분에 손절 on, ' + str(self.realclose))
-
-                # 9시 20분에는 청산
-                if self.cur_time >= QTime(9, 15, 0) and self.sb_check15 == 0:
-                    self.sb_check15 = 1
-                    print("15분 현재가", self.realclose)
-                    self.ui_sb.append(str(self.text_time) + ',' + str(self.realclose) + ',' + str(self.sb_price) + ',' + str(self.sb_num))
-                    if self.ui_sb_realtrade.isChecked() == True:
-                        self.send_order("send_order_rq", "0101", self.account1, 2, str(self.code), self.sb_num, 0, "03", "")
-                    self.sb_num = 0
-
-
-            # 장 중 반복 매매, 시작가 획득 시점부터 수행
-            if self.openprice > 0 and self.cur_time < QTime(15, 30, 0) and self.cur_time > QTime(8, 55, 0):
-                self.count = self.count + 1
-                # 초당평균값
-                self.ave5sec[self.count % 5] = self.chegang
-                ave5seccg = (self.ave5sec[0] + self.ave5sec[1] + self.ave5sec[2] + self.ave5sec[3] + self.ave5sec[4]) / 5
-
-                # 장시작 후 1번만 수행
-                if self.count == 1:
-                    # 장전매수주문에 대한 가격 저장
-                    self.sb_price = self.openprice
-                    print('장전매수주문내역')
-                    self.ui_sb.append('장전매수주문내역: ' + str(self.sb_price) + ',' + str(self.sb_num))
-
-                    # 거래량 돌파여부 확인용 초기변수
-                    # self.preprice, self.prevolume, self.prepreprice = self.get_predata('233740')
-                    # print('전일가:', self.preprice)
-                    # print('전전일가:', self.prepreprice)
-                    # self.ui_preprice.setText(str(self.preprice))
-                    # print('전일거래량:', self.prevolume)
-                    # self.ui_prevolume.setText(str(self.prevolume))
-                    # self.ui_sb.append('시작가: ' + str(self.openprice))
-
-                    # 잔고확인 - 향후 실거래시 잔고를 기반으로 수량 확인
-                    # 장 시작 후 매수물량 반영되는 듯하니 확인필요
-                    remain_num, remain_price = self.check_balance(self.account1, str(code))
-                    print('잔고 업데이트:', remain_num, remain_price)
-                    if remain_num == 0:
-                        self.sb_num = 0
-
-            # 장 마감 후 최종가 확인
-            if self.openprice > 0 and self.cur_time > QTime(15, 31, 0) and self.endcheck == False:
-                self.endcheck = True
-                average3day = round((self.realclose + self.prepreprice + self.preprice) / 3)
-                print('3일 평균가:', average3day)
-                self.ui_v233740_average3day.setText(str(average3day))
-                if self.realclose > average3day:
-                    print('종가가 3일 평균가 상회하여 매수', self.realclose)
-                    self.ui_sb.append(self.text_time + ', 종가매수수행, ' + str(self.realclose))
-                    
-        # 변수 선언
-        self.common_variable()
-
-        self.startButton.clicked.connect(lambda: self.buttonClicked('start'))
-        # self.ui_orderButton.clicked.connect(lambda: self.buttonClicked('order'))
-        self.kiwoom.OnEventConnect.connect(self._event_connect)
-        self.kiwoom.OnReceiveTrData.connect(self._ReceiveTrData)
-        self.kiwoom.OnReceiveRealData.connect(self._ReceiveRealData)
-        self.kiwoom.OnReceiveChejanData.connect(self._ReceiveChejanData)
-
-        
-
-    # 각 버튼 클릭 시 동작
-    def buttonClicked(self, action):
-    
-        if action  == 'start':
-            self.startButton.setEnabled(False)
-            # 기본정보조회
-            self.set_input_value("종목코드", '233740')
-            nRet = self.kiwoom.dynamicCall('CommRqData(QString, QString, int, QString)', "주식기본정보", "opt10001", 0, "1001")
-
-            # nRet = int(self.comm_rq_data("주식기본정보", "opt10001", 0, "1001"))
-            if nRet == 0:
-                self.ui_history_TE.append("주식 정보요청 성공")
-            else:
-                self.ui_history_TE.append("주식 정보요청 실패")
-
-            # login function keyboard test
-            #반복문 수행
-            self.starttrading = True
-
-    # 로그인버튼 클릭시 동작
-    def _event_connect(self, err_code):
-        if err_code == 0:
-            self.ui_history_TE.append("login success")
-            if self.kiwoom.dynamicCall('GetConnectState()') == 1:
-                self.ui_history_TE.append("Connect Status: Connecting")
-                self.login = True
-                self.startButton.setEnabled(True)
-            elif self.kiwoom.dynamicCall('GetConnectState()') == 0:
-                self.ui_history_TE.append("Connect Status: 미연결")
-
-            # 예수금 및 잔고 정보 획득
-            remain_num, remain_price = self.check_balance(self.account1, '233740')
-            print('233740 잔고:', remain_num, remain_price)
-            print('예수금:', self.deposit)
-
-            # 전일 종가 획득
-            self.startButton.setEnabled(False)
-            # 기본정보조회
-            self.set_input_value("종목코드", '233740')
-            nRet = self.kiwoom.dynamicCall('CommRqData(QString, QString, int, QString)', "주식기본정보", "opt10001", 0, "1001")
-
-            # nRet = int(self.comm_rq_data("주식기본정보", "opt10001", 0, "1001"))
-            if nRet == 0:
-                self.ui_history_TE.append("주식 정보요청 성공")
-            else:
-                self.ui_history_TE.append("주식 정보요청 실패")
-
-            #반복문 수행
-            self.starttrading = True
-
-        else:
-            self.ui_history_TE.append("로그인 실패")
-
     # TR Data 처리 함수
     def _ReceiveTrData(self, screen_no, rqname, trcode, record_name, next, unused1, unused2, unused3, unused4):
         # print('RQ:', rqname)
@@ -539,81 +400,30 @@ class MyWindow(QMainWindow, form_class):
                 self.close = self.change_format(close)
 
                 print(code, name, close, rate)
-                #self.ui_openprice.setText(str(self.openprice))
             return
 
         elif rqname == "시가정보":
             self.openprice = self.change_format(self._get_comm_data(trcode, rqname, 0, "시가"))
             if self.openprice > 0:
-                self.ui_openprice.setText(str(self.openprice))
                 self.ui_history_TE.append("시작가: " + str(self.openprice))
-
-        elif rqname == '계좌잔고':
-            # multi data
-            rows = self.kiwoom.dynamicCall("GetRepeatCnt(QString, QString)", trcode, rqname)
-            for i in range(rows):
-                num = self._get_comm_data(trcode, rqname, i, "종목번호")
-                quantity = self._get_comm_data(trcode, rqname, i, "보유수량")
-                purchase_price = self._get_comm_data(trcode, rqname, i, "매입가")
-                strip_num = num.lstrip('A')  # 종목번호 왼쪽의 A를 없앰
-                quantity = self.change_format(quantity)
-                purchase_price = self.change_format(purchase_price)
-
-                self.opw00018_output['multi'].append([strip_num, quantity, purchase_price])
-
-        elif rqname == 'send_order_rq':
-            print('send order')
-
-        elif rqname == '분봉차트조회':
-            data_cnt = 60
-            for i in range(data_cnt):  # 반복문으로 데이터를 하나씩 가져옴
-                time = self._get_comm_data(trcode, rqname, i, "체결시간")
-                open = self.change_format(self._get_comm_data(trcode, rqname, i, "시가"))
-                high = self.change_format(self._get_comm_data(trcode, rqname, i, "고가"))
-                low = self.change_format(self._get_comm_data(trcode, rqname, i, "저가"))
-                close = self.change_format(self._get_comm_data(trcode, rqname, i, "현재가"))
-                volume = self._get_comm_data(trcode, rqname, i, "거래량")
-
-                self.ohlcv['time'].append(time)
-                self.ohlcv['open'].append(open)
-                self.ohlcv['high'].append(high)
-                self.ohlcv['low'].append(low)
-                self.ohlcv['close'].append(close)
-                self.ohlcv['volume'].append(int(volume))
-
-        elif rqname == '일봉차트조회':
-            data_cnt = 3
-            for i in range(data_cnt):  # 반복문으로 데이터를 하나씩 가져옴
-                day = self._get_comm_data(trcode, rqname, i, "일자")
-                open = self.change_format(self._get_comm_data(trcode, rqname, i, "시가"))
-                high = self.change_format(self._get_comm_data(trcode, rqname, i, "고가"))
-                low = self.change_format(self._get_comm_data(trcode, rqname, i, "저가"))
-                close = self.change_format(self._get_comm_data(trcode, rqname, i, "현재가"))
-                volume = self._get_comm_data(trcode, rqname, i, "거래량")
-
-                self.ohlcv['day'].append(day)
-                self.ohlcv['open'].append(open)
-                self.ohlcv['high'].append(high)
-                self.ohlcv['low'].append(low)
-                self.ohlcv['close'].append(close)
-                self.ohlcv['volume'].append(int(volume))
-
-        elif rqname == "체결정보조회":
-            data_cnt = 1
-            for i in range(data_cnt):
-                date = self._get_comm_data(trcode, rqname, i, "날짜")
-                volume = self.change_format(self._get_comm_data(trcode, rqname, i, "거래량"))
-                chegang = self._get_comm_data(trcode, rqname, i, "체결강도")
-
-                self.chegang['date'] = date
-                self.chegang['volume'] = volume
-                self.chegang['chegang'] = chegang
 
         try:
             self.tr_event_loop.exit()
         except AttributeError:
             print('except')
             pass
+
+
+
+'''
+        # 변수 선언
+        self.common_variable()
+        
+        self.startButton.clicked.connect(lambda: self.buttonClicked('start'))
+        self.kiwoom.OnEventConnect.connect(self._event_connect)
+        self.kiwoom.OnReceiveTrData.connect(self._ReceiveTrData)
+        self.kiwoom.OnReceiveRealData.connect(self._ReceiveRealData)
+        self.kiwoom.OnReceiveChejanData.connect(self._ReceiveChejanData)
 
     # 체결 정보 표기 - 매수/매도 주문 및 체결 시 작동
     def _ReceiveChejanData(self, gubun, item_cnt, fid_list):
@@ -645,60 +455,6 @@ class MyWindow(QMainWindow, form_class):
         elif gubun == "3":
             self.ui_history_TE.append("구분: 특이신호")
 
-
-    # 변수 모음
-    def common_variable(self):
-        self.login = False
-        self.starttrading = False
-        self.count = 0
-        self.count_60s = 0
-        self.openprice = 0
-        self.minprice = 1000000
-        self.maxprice = 0
-        self.v233740_amount = 0
-        self.chegang = 100
-        self.sellhoga = 0
-        self.buyhoga = 10000
-        self.realclose = 10000
-        self.prepre_chegang = 100
-        self.prev_chegang = 100
-        self.now_chegang = 100
-        self.real_count = 0
-
-        self.precheck = False
-        self.endcheck = False
-
-        # 시가매매변수
-        self.sb_buy = False # 장전 매수여부 확인용
-        self.sb_sell = False # 손절 on 체크용
-
-        self.sb_num = 45
-        self.sb_price = 0
-        self.sb_gap = 15
-
-        self.sb_check03 = 0
-        self.sb_check05 = 0
-        self.sb_check15 = 0
-        self.prebuyhoga = 10000
-
-        # 장초반 흐름 파악
-        self.chegangflow = [100,100,100,100,100]
-        self.chegangflowcount = 0
-
-        self.cghistory = [100,100,100,100,100]
-        self.cgcount = 0
-        self.cgstart = False
-        self.cgend = False
-
-        # 초당평균값
-        self.ave5sec = [100,100,100,100,100]
-
-        self.position = 0
-
-        # 1분 봉 정보조회
-        self.df_60s_1t = DataFrame(columns=("time", "count", 'volume', 'chegang'))
-
-
     # 실시간 데이터 처리
     def _ReceiveRealData(self, code, type1, data):
         if type1 == "주식체결":
@@ -708,45 +464,11 @@ class MyWindow(QMainWindow, form_class):
             self.buyhoga = self.change_format(self.kiwoom.dynamicCall("GetCommRealData(QString, 28)"))
             self.chegang = float(self.kiwoom.dynamicCall("GetCommRealData(QString, 228)"))
             self.text_time = self.cur_time.toString("hh:mm:ss")
-            self.ui_realtime.append(self.text_time + "/" + str(self.realclose) + "/" + str(self.sellhoga) + "/"+ str(self.buyhoga) + "/"+ str(volume) + "/" + str(self.chegang))
 
             if self.chegang < 500:
                 self.real_count = self.real_count + 1
                 chegangflowcount = self.real_count % 5
                 self.chegangflow[chegangflowcount] = self.chegang
-
-
-
-            if code == str(self.code) and self.openprice > 0: # 시작가 획득 후부터 동작
-                # 최대 최소값 확인
-                if self.realclose >= self.maxprice:
-                    self.maxprice = self.realclose
-                    # self.maxtime = int(self.text_time)
-                    self.ui_maxprice.setText(str(self.maxprice))
-                    self.ui_maxtime.setText(self.text_time)
-                if self.realclose <= self.minprice:
-                    self.minprice = self.realclose
-                    self.ui_minprice.setText(str(self.minprice))
-                    self.ui_mintime.setText(self.text_time)
-
-                # 시가매수 결과
-                if self.sb_num > 0:
-                    # 수익
-                    if self.buyhoga >= self.sb_price + self.sb_gap:
-                        print(self.text_time, '시가매수 수익', self.buyhoga)
-                        self.ui_sb.append(self.text_time + ', 시가매수 수익, ' + str(self.buyhoga) + ', ' + str(self.buyhoga - self.openprice))
-                        if self.ui_sb_realtrade.isChecked() == True:
-                           self.send_order("send_order_rq", "0101", self.account1, 2, str(self.code), self.sb_num, 0, "03", "")
-                        self.sb_num = 0
-                    # 손절
-                    if self.sb_sell == True and self.buyhoga < self.sb_price - 75:
-                        print(self.text_time, '시가매수 손절', self.buyhoga)
-                        self.ui_sb.append(self.text_time + ', 시가매수 손절, ' + str(self.buyhoga) + ', ' + str(self.buyhoga - self.openprice))
-                        if self.ui_sb_realtrade.isChecked() == True:
-                            self.send_order("send_order_rq", "0101", self.account1, 2, str(self.code), self.sb_num, 0, "03", "")
-                        self.sb_num = 0
-                        # 손절됐을 경우 추가 매수 고려
-                        # 수익률 -, 체결강도 80미만, 3,5분컷
 
 
         if type1 == "주식우선호가":
@@ -768,17 +490,6 @@ class MyWindow(QMainWindow, form_class):
         prepreprice = df.iloc[2]['close']
         return preprice, prevolume, prepreprice
 
-    # 종목의 입력일에 대한 분봉정보 가져오기
-    def get_ohlcv(self, code, thick):
-        self.ohlcv = {'day': [], 'open': [], 'high': [], 'low': [], 'close': [], 'volume': []}
-        self.set_input_value("종목코드", code)
-        self.set_input_value("틱범위", thick)
-        self.set_input_value("수정주가구분", 1)
-        self.comm_rq_data("일봉차트조회", "opt10081", 0, "0101")
-
-        df = DataFrame(self.ohlcv, columns=['day', 'open', 'high', 'low', 'close', 'volume'])
-
-        return df
     # ====================== 키움 Open API =======================
 
     # 시가정보
@@ -814,9 +525,6 @@ class MyWindow(QMainWindow, form_class):
 
         print(interval, ":", time, "%4d" % df.ix[count]['count'], volume, chegang)
 
-        if interval == 61:
-            self.ui_sb.append(time + ',' + str(volume) + ',' + str(chegang))
-
 
 # ================================================================================ 키움클래스
 
@@ -837,10 +545,6 @@ class Kiwoom(QAxWidget):
         #self.login_event_loop.exec_()
         return v
 
-    # 현재 연결상태 확인
-    def get_connect_state(self):
-        ret = self.dynamicCall("GetConnectState()")
-        return ret
 
     def get_code_list(self, market):
         code_list = self.dynamicCall("GetCodeListByMarket(QString)", market)

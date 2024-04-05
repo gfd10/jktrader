@@ -197,12 +197,10 @@ class Kiwoom(QAxWidget):
             pass
 
     ########################### 상황별 호출 함수 #####################################################################
+    # 계좌예수금 확인
     def _opw00001(self, rqname, trcode):
-        print(rqname, trcode)
         d2_deposit = self._comm_get_data(trcode, "", rqname, 0, "d+2추정예수금")
-        print(d2_deposit)
         self.d2_deposit = Kiwoom.change_format(d2_deposit)
-        print(self.d2_deposit)
 
     def reset_opt10001_output(self):
         self.open_price = 0
@@ -332,12 +330,40 @@ class Kiwoom(QAxWidget):
         rows = self._get_repeat_cnt(trcode, rqname)
         for i in range(rows):
             self.hoga_time = self._comm_get_data(trcode, "", rqname, 0, "호가잔량기준시간")
+            sell_janrang_total = int(self._comm_get_data(trcode, "", rqname, 0, "총매도잔량"))
+            sell_janrang_7hoga = int(self._comm_get_data(trcode, "", rqname, 0, "매도7차선잔량"))
+            sell_janrang_6hoga = int(self._comm_get_data(trcode, "", rqname, 0, "매도6우선잔량"))
+            sell_janrang_5hoga = int(self._comm_get_data(trcode, "", rqname, 0, "매도5차선잔량"))
+            sell_janrang_4hoga = int(self._comm_get_data(trcode, "", rqname, 0, "매도4차선잔량"))
+            sell_janrang_3hoga = int(self._comm_get_data(trcode, "", rqname, 0, "매도3차선잔량"))
+            sell_janrang_2hoga = int(self._comm_get_data(trcode, "", rqname, 0, "매도2차선잔량"))
+            sell_janrang_1hoga = int(self._comm_get_data(trcode, "", rqname, 0, "매도최우선잔량"))
             hoga_buy_price = self._comm_get_data(trcode, "", rqname, 0, "매도최우선호가")
             hoga_sell_price = self._comm_get_data(trcode, "", rqname, 0, "매수최우선호가")
+            buy_janrang_1hoga = int(self._comm_get_data(trcode, "", rqname, 0, "매수최우선잔량"))
+            buy_janrang_2hoga = int(self._comm_get_data(trcode, "", rqname, 0, "매수2차선잔량"))
+            buy_janrang_3hoga = int(self._comm_get_data(trcode, "", rqname, 0, "매수3차선잔량"))
+            buy_janrang_4hoga = int(self._comm_get_data(trcode, "", rqname, 0, "매수4차선잔량"))
+            buy_janrang_5hoga = int(self._comm_get_data(trcode, "", rqname, 0, "매수5차선잔량"))
+            buy_janrang_6hoga = int(self._comm_get_data(trcode, "", rqname, 0, "매수6우선잔량"))
+            buy_janrang_7hoga = int(self._comm_get_data(trcode, "", rqname, 0, "매수7차선잔량"))
+            buy_janrang_total = int(self._comm_get_data(trcode, "", rqname, 0, "총매수잔량"))
+
             hoga_sell_price = int(hoga_sell_price.lstrip('+-'))  # 앞의 부호 제거
             hoga_buy_price = int(hoga_buy_price.lstrip('+-'))  # 앞의 부호 제거
-            self.opt10004_output['multi'].append([hoga_sell_price, hoga_buy_price])
+            sell_janrang_3hap = sell_janrang_1hoga + sell_janrang_2hoga + sell_janrang_3hoga
+            sell_janrang_5hap = sell_janrang_3hap + sell_janrang_4hoga + sell_janrang_5hoga
+            sell_janrang_7hap = sell_janrang_5hap + sell_janrang_6hoga + sell_janrang_7hoga
+            buy_janrang_3hap = buy_janrang_1hoga + buy_janrang_2hoga + buy_janrang_3hoga
+            buy_janrang_5hap = buy_janrang_3hap + buy_janrang_4hoga + buy_janrang_5hoga
+            buy_janrang_7hap = buy_janrang_5hap + buy_janrang_6hoga + buy_janrang_7hoga
+            diff_total = buy_janrang_total - sell_janrang_total
+            diff_7hap = buy_janrang_7hap - sell_janrang_7hap
+            diff_5hap = buy_janrang_5hap - sell_janrang_5hap
+            diff_3hap = buy_janrang_3hap - sell_janrang_3hap
+            diff_1hap = buy_janrang_1hoga - sell_janrang_1hoga
 
+            self.opt10004_output['multi'].append([hoga_sell_price, hoga_buy_price, sell_janrang_7hap, sell_janrang_5hap, sell_janrang_3hap, sell_janrang_1hoga, buy_janrang_1hoga, buy_janrang_3hap, buy_janrang_5hap, buy_janrang_7hap, diff_7hap, diff_5hap, diff_3hap, diff_1hap])
     # 주식체결요청 요청의 답변 처리
     def _opt10012(self, rqname, trcode):  # opt10001에 대한 답변을 함수로 호출
         # single data
@@ -352,14 +378,12 @@ if __name__ == "__main__":
     kiwoom = Kiwoom()  # Kiwoom 클래스로 인스턴스 생성
     kiwoom.comm_connect()  # 키움 연결창 발생
 
-    print('start')
-    kiwoom.set_input_value("종목코드", "122630")
-    kiwoom.comm_rq_data("opt10001_req", "opt10001", 0, "0101")
-    print(kiwoom.current_price)
-    print('test2')
-    kiwoom.dynamicCall("GetCommRealData(122630, 10)")
-    kiwoom.get_comm_real_data("122630", 10)
-    print('test3')
+    # 실시간 조회 테스트
+    # kiwoom.set_input_value("종목코드", "233740")
+    # kiwoom.comm_rq_data("opt10001_req", "opt10001", 0, "0101")
+    # print(kiwoom.current_price)
+    # kiwoom.dynamicCall("GetCommRealData(122630, 10)")
+    # kiwoom.get_comm_real_data("122630", 10)
 
     # kiwoom.reset_opw00018_output()
     # account_number = kiwoom.get_login_info("ACCNO")
@@ -395,3 +419,8 @@ if __name__ == "__main__":
     #    kiwoom.set_input_value("틱범위", "1")
     #    kiwoom.set_input_value("수정주가구분", 1)
     #    kiwoom.comm_rq_data("opt10080_req", "opt10080", 2, "0101")
+
+    # opt10004 TR 요청 - 주식호가요청
+    kiwoom.reset_opt10004_output()
+    kiwoom.set_input_value("종목코드", "233740")
+    kiwoom.comm_rq_data("opt10004_req", "opt10004", 0 ,"0101")
